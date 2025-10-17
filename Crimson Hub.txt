@@ -640,6 +640,55 @@ local Input = MainTab2:CreateInput({
         end
     end,
 })
+local Button = MainTab1:CreateButton({
+   Name = "Godmode",
+   Callback = function()
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local localPlayer = Players.LocalPlayer
+local character = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+-- GLOBAL state to handle multiple runs
+_G.GodMode = _G.GodMode or {}
+local state = _G.GodMode
+
+if state.enabled then
+    -- Disable GodMode
+    if state.connection then
+        state.connection:Disconnect()
+        state.connection = nil
+    end
+
+    -- Remove ForceField if exists
+    local ff = character:FindFirstChild("AdminForceField")
+    if ff then
+        ff:Destroy()
+    end
+
+    state.enabled = false
+    print("[GodMode] Disabled")
+else
+    -- Enable GodMode
+    state.enabled = true
+
+    -- Add ForceField
+    local ff = Instance.new("ForceField")
+    ff.Name = "AdminForceField"
+    ff.Parent = character
+
+    -- Keep health full every heartbeat
+    state.connection = RunService.Heartbeat:Connect(function()
+        if humanoid and humanoid.Health > 0 then
+            humanoid.Health = humanoid.MaxHealth
+        end
+    end)
+
+    print("[GodMode] Enabled")
+end
+
+   end,
+})
 
 local MainSection = MainTab2:CreateSection("Main")
 
@@ -648,3 +697,295 @@ local MainSection = MainTab2:CreateSection("Main")
 local MainTab4 = Window:CreateTab("Work at a pizza place", nil) -- Title, Image
 local MainSection = MainTab4:CreateSection("Main")
 
+
+local Button = MainTab4:CreateButton({
+   Name = "Steal Manager Spot",
+   Callback = function()
+-- TeleportWhenTeamEmpty.lua
+-- LocalScript (client)
+-- Teleports the local player to TELEPORT_POSITION when TARGET_TEAM_NAME has no players.
+-- Adjust settings below.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TeamsService = game:GetService("Teams") -- optional if you prefer Team objects
+
+local LocalPlayer = Players.LocalPlayer
+
+-- CONFIG:
+local TARGET_TEAM_NAME = "Manager" -- team name to watch (case-sensitive)
+local TELEPORT_POSITION = Vector3.new(23.58, 4.18, 6.46) -- where to teleport when team is empty
+local CHECK_INTERVAL = 1 -- seconds between checks
+local DEBOUNCE_TIME = 3 -- seconds to wait after teleport before allowing teleport again (prevents spam)
+
+-- Optional: only teleport if the local player is not already on that team
+local SKIP_IF_ON_TARGET_TEAM = true
+
+-- Internal
+local lastTeleport = 0
+
+local function getTeamByName(name)
+    if not name then return nil end
+    for _, t in pairs(TeamsService:GetChildren()) do
+        if t:IsA("Team") and t.Name == name then
+            return t
+        end
+    end
+    return nil
+end
+
+local function teamPlayerCount(team)
+    if not team then return 0 end
+    local count = 0
+    for _, p in pairs(Players:GetPlayers()) do
+        if p.Team == team then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function teleportLocalPlayerTo(pos)
+    local char = LocalPlayer.Character
+    if not char then return false end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+    if not hrp then return false end
+
+    -- Use SetPrimaryPartCFrame if PrimaryPart exists, otherwise set HRP.CFrame
+    if char.PrimaryPart then
+        char:SetPrimaryPartCFrame(CFrame.new(pos) * CFrame.new(0, 2, 0)) -- slight upward offset
+    else
+        hrp.CFrame = CFrame.new(pos) * CFrame.new(0, 2, 0)
+    end
+
+    lastTeleport = tick()
+    return true
+end
+
+-- main loop
+spawn(function()
+    -- Wait until player and character exist
+    while not LocalPlayer do
+        wait()
+    end
+
+    -- resolve team object if provided by name
+    local targetTeam = getTeamByName(TARGET_TEAM_NAME)
+
+    while true do
+        local now = tick()
+
+        -- If team object might change (e.g., team created late), keep resolving by name
+        if not targetTeam then
+            targetTeam = getTeamByName(TARGET_TEAM_NAME)
+        end
+
+        -- Optionally skip if local player is on that team
+        if SKIP_IF_ON_TARGET_TEAM and targetTeam and LocalPlayer.Team == targetTeam then
+            -- do nothing
+        else
+            local count = teamPlayerCount(targetTeam)
+            if count == 0 then
+                -- check debounce
+                if now - lastTeleport > DEBOUNCE_TIME then
+                    local success = teleportLocalPlayerTo(TELEPORT_POSITION)
+                    if success then
+                        -- optional: notify the local admin player
+                        pcall(function()
+                            game.StarterGui:SetCore("ChatMakeSystemMessage", {
+                                Text = "[AutoTeleport] Team '".. tostring(TARGET_TEAM_NAME) .."' empty. Teleported.";
+                                Color = Color3.fromRGB(100, 255, 100);
+                                Font = Enum.Font.SourceSansBold;
+                                FontSize = Enum.FontSize.Size24;
+                            })
+                        end)
+                    end
+                end
+            end
+        end
+
+        wait(CHECK_INTERVAL)
+    end
+end)
+
+
+   end,
+})
+
+local Toggle = MainTab2:CreateToggle({
+   Name = "(Debugging)Aimbot",
+   CurrentValue = false,
+   Flag = "Toggle133",
+   Callback = function(Value)
+        local Players = game:GetService("Players")
+        local RunService = game:GetService("RunService")
+        local Workspace = game:GetService("Workspace")
+
+        -- Ensure game and local player are loaded
+        if not game:IsLoaded() then game.Loaded:Wait() end
+        local localPlayer = Players.LocalPlayer
+        if not localPlayer then
+            warn("LocalPlayer not found.")
+            return
+        end
+
+        -- Wait for camera to exist
+        local camera = Workspace.CurrentCamera
+        if not camera then
+            camera = Workspace:GetPropertyChangedSignal("CurrentCamera"):Wait()
+        end
+
+        -- CONFIG
+        local FOV_DEGREES = 40
+        local MAX_DISTANCE = 2000
+        local SMOOTHNESS = 8
+        local TEAM_CHECK = true
+        local PREDICT = false
+        local BULLET_SPEED = 200
+        local REQUIRE_LOS = true -- line-of-sight check
+
+        local aimConnection
+        local charAddedConn
+        local currentHumanoid
+
+        -- Update references to character/humanoid/camera (safe)
+        local function updateCharacterReferences()
+            -- wait for character if it doesn't exist yet
+            local char = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+            currentHumanoid = char:FindFirstChildOfClass("Humanoid")
+            -- ensure camera reference
+            camera = Workspace.CurrentCamera or Workspace:GetPropertyChangedSignal("CurrentCamera"):Wait()
+        end
+
+        -- Utility: get R6 torso
+        local function getR6TargetPart(player)
+            if not player or not player.Character then return nil end
+            local char = player.Character
+            return char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char.PrimaryPart
+        end
+
+        -- Wall check: returns true if visible
+        local function hasLineOfSight(targetPart)
+            if not targetPart or not camera then return false end
+            local origin = camera.CFrame.Position
+            local direction = targetPart.Position - origin
+            if direction.Magnitude <= 0 then return false end
+
+            local raycastParams = RaycastParams.new()
+            raycastParams.FilterDescendantsInstances = {}
+            if localPlayer.Character then
+                table.insert(raycastParams.FilterDescendantsInstances, localPlayer.Character)
+            end
+            raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+            local result = Workspace:Raycast(origin, direction, raycastParams)
+            if result then
+                return result.Instance:IsDescendantOf(targetPart.Parent)
+            else
+                return true
+            end
+        end
+
+        -- Closest valid target
+        local function getClosestTargetR6()
+            if not camera then return nil end
+            local camPos = camera.CFrame.Position
+            local camLook = camera.CFrame.LookVector
+            local best, bestAngle, bestDist = nil, math.huge, math.huge
+
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= localPlayer and p.Character and p.Character.Parent then
+                    if TEAM_CHECK then
+                        local myTeam = localPlayer.Team
+                        if myTeam and p.Team == myTeam then
+                            goto continue
+                        end
+                    end
+                    local part = getR6TargetPart(p)
+                    if part and part.Position then
+                        local dir = part.Position - camPos
+                        local dist = dir.Magnitude
+                        if dist <= MAX_DISTANCE then
+                            local dirNorm = dir.Unit
+                            local angle = math.deg(math.acos(math.clamp(camLook:Dot(dirNorm), -1, 1)))
+                            if angle <= FOV_DEGREES then
+                                if REQUIRE_LOS and not hasLineOfSight(part) then
+                                    goto continue
+                                end
+                                if angle < bestAngle or (math.abs(angle - bestAngle) < 1e-3 and dist < bestDist) then
+                                    best = {player = p, part = part}
+                                    bestAngle = angle
+                                    bestDist = dist
+                                end
+                            end
+                        end
+                    end
+                end
+                ::continue::
+            end
+            return best
+        end
+
+        -- Clean up existing connections
+        local function stopAiming()
+            if aimConnection then
+                aimConnection:Disconnect()
+                aimConnection = nil
+            end
+            if charAddedConn then
+                charAddedConn:Disconnect()
+                charAddedConn = nil
+            end
+        end
+
+        -- If toggle is OFF: stop and return
+        if not Value then
+            stopAiming()
+            return
+        end
+
+        -- Toggle ON: ensure clean start
+        stopAiming()
+        -- make sure refs exist
+        updateCharacterReferences()
+
+        -- Update camera on respawn
+        charAddedConn = localPlayer.CharacterAdded:Connect(function()
+            task.wait(0.1)
+            updateCharacterReferences()
+        end)
+
+        -- Aim loop (disconnects automatically on toggle off)
+        aimConnection = RunService.RenderStepped:Connect(function(dt)
+            -- guard: if toggle was turned off, stop immediately
+            if not Value then
+                stopAiming()
+                return
+            end
+
+            if not camera or not camera.Parent then return end
+            local targetInfo = getClosestTargetR6()
+            if not targetInfo then return end
+            local targetPart = targetInfo.part
+            if not targetPart then return end
+
+            local camPos = camera.CFrame.Position
+            local aimPos = targetPart.Position
+
+            -- optional prediction
+            if PREDICT and BULLET_SPEED and targetPart:IsA("BasePart") then
+                local vel = targetPart.AssemblyLinearVelocity or targetPart.Velocity or Vector3.new()
+                local t = (aimPos - camPos).Magnitude / BULLET_SPEED
+                aimPos = aimPos + vel * t
+            end
+
+            local desiredCFrame = CFrame.new(camPos, aimPos)
+            local t = math.clamp(1 - math.exp(-SMOOTHNESS * dt), 0, 1)
+            -- safe guard in case camera becomes nil mid-frame
+            if camera and camera.CFrame then
+                camera.CFrame = camera.CFrame:Lerp(desiredCFrame, t)
+            end
+        end)
+   end,
+})
