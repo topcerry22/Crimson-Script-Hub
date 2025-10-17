@@ -813,12 +813,6 @@ end)
 local Button = MainTab1:CreateButton({
    Name = "Aimbot",
    Callback = function()
- Rayfield:Notify({
-   Title = "Notice",
-   Content = "Use H to toggle aimbot",
-   Duration = 6.5,
-   Image = 4483362458,
-})
 
 -- Dev Aimbot LocalScript (StarterPlayerScripts)
 -- Use only in places you own. Do not abuse.
@@ -1046,9 +1040,16 @@ end)
 
 print("Dev Aimbot loaded. Toggle with", tostring(ENABLE_KEY))
 
+ Rayfield:Notify({
+   Title = "Notice",
+   Content = ""DevAimbot:", ENABLED and "Enabled" or "Disabled"",
+   Duration = 6.5,
+   Image = 4483362458,
+})
 
    end,
 })
+
 
 
 
