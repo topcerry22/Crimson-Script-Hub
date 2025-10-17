@@ -836,12 +836,15 @@ local ENABLE_KEY = Enum.KeyCode.H   -- toggle key
 local ENABLED = false                        -- starts disabled
 local FOV_DEGREES = 60                       -- cone to search in degrees
 local MAX_DISTANCE = 2000                    -- max target distance
-local SMOOTHNESS = 8                         -- higher = slower smoothing (lerp factor per second)
+local SMOOTHNESS = 8                         -- kept for fallback if snapping disabled
 local TEAM_CHECK = true                      -- ignore players on same team
-local PREDICT = false                         -- enable linear prediction
+local PREDICT = false                        -- enable linear prediction
 local BULLET_SPEED = 200                     -- studs per second (approx) for prediction; set nil to disable prediction
 local AIM_AT_HITPART = true                  -- true aims at HumanoidRootPart if present, otherwise PrimaryPart
 local VISIBILITY_OFFSET = Vector3.new(0, 1.5, 0) -- offset used for LOS checks and aiming
+
+-- New: snap setting
+local SNAP_TO_TARGET = true -- true = instantly snap camera to target; false = smooth lerp
 -- ==================
 
 local function isValidTarget(p)
@@ -873,8 +876,6 @@ end
 
 -- Prediction helper (unchanged)
 local function predictPosition(currPos, currVel, originPos, speed)
-    -- Simple linear prediction: solve for t where distance(origin, currPos + currVel * t) = speed * t
-    -- Quadratic: (currVel·currVel - speed^2) t^2 + 2*(rel·currVel) t + (rel·rel) = 0, where rel = currPos - originPos
     local rel = currPos - originPos
     local a = currVel:Dot(currVel) - (speed * speed)
     local b = 2 * rel:Dot(currVel)
@@ -900,12 +901,10 @@ end
 
 -- ===== Wall / LOS check =====
 local function hasLineOfSight(fromPos, toPos, targetModel)
-    -- If positions are invalid, be conservative (no LOS)
     if not fromPos or not toPos then
         return false
     end
 
-    -- Short-circuit if targetModel is nil: do a simple raycast ignoring localPlayer
     local params = RaycastParams.new()
     params.FilterDescendantsInstances = { localPlayer.Character }
     params.FilterType = Enum.RaycastFilterType.Blacklist
@@ -915,16 +914,13 @@ local function hasLineOfSight(fromPos, toPos, targetModel)
     local result = Workspace:Raycast(fromPos, direction, params)
 
     if not result then
-        -- nothing hit => clear view
         return true
     end
 
-    -- If ray hit something that is part of the target model, treat as visible
     if targetModel and result.Instance and result.Instance:IsDescendantOf(targetModel) then
         return true
     end
 
-    -- otherwise blocked
     return false
 end
 
@@ -945,7 +941,6 @@ local function getClosestTarget()
                     local dirNorm = dir.Unit
                     local angle = math.deg(math.acos(math.clamp(camLook:Dot(dirNorm), -1, 1)))
                     if angle <= FOV_DEGREES then
-                        -- prediction: if enabled, compute predicted point and require LOS to predicted if possible
                         local passesLOS = true
                         if PREDICT and BULLET_SPEED and part:IsA("BasePart") then
                             local vel = Vector3.new(0,0,0)
@@ -955,16 +950,12 @@ local function getClosestTarget()
                                 vel = part.Velocity
                             end
                             local predicted = predictPosition(targetPos, vel, camPos, BULLET_SPEED)
-                            -- require LOS to predicted position; if predicted is off into wall, reject
                             passesLOS = hasLineOfSight(camPos, predicted, p.Character)
-                            -- if predicted is visible, use the predicted position for distance/angle preference tests
                             if passesLOS then
-                                -- recompute angle/dist using predicted
                                 local dir2 = (predicted - camPos)
                                 dist = dir2.Magnitude
                                 dirNorm = dir2.Unit
                                 angle = math.deg(math.acos(math.clamp(camLook:Dot(dirNorm), -1, 1)))
-                                -- still must be within FOV and distance
                                 if dist > MAX_DISTANCE or angle > FOV_DEGREES then
                                     passesLOS = false
                                 else
@@ -972,12 +963,10 @@ local function getClosestTarget()
                                 end
                             end
                         else
-                            -- no prediction: require LOS to target position
                             passesLOS = hasLineOfSight(camPos, targetPos, p.Character)
                         end
 
                         if passesLOS then
-                            -- prefer smaller angle, then closer
                             if angle < bestAngle or (math.abs(angle - bestAngle) < 1e-3 and dist < bestDist) then
                                 bestTarget = {player = p, part = part, aimPos = targetPos}
                                 bestAngle = angle
@@ -998,12 +987,11 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == ENABLE_KEY then
         ENABLED = not ENABLED
-        -- optional print
         print("DevAimbot:", ENABLED and "Enabled" or "Disabled")
     end
 end)
 
--- Main aim loop on RenderStepped for smooth camera updates
+-- Main aim loop on RenderStepped for smooth camera updates (or instant snap)
 RunService.RenderStepped:Connect(function(dt)
     if not ENABLED then return end
     if not camera or not camera.Parent then return end
@@ -1018,9 +1006,7 @@ RunService.RenderStepped:Connect(function(dt)
     local camPos = camera.CFrame.Position
     local aimPos = targetInfo.aimPos or targetPart.Position + VISIBILITY_OFFSET
 
-    -- If prediction enabled but we didn't compute predicted in getClosestTarget (rare), fallback to attempt here:
     if PREDICT and BULLET_SPEED and targetPart and targetPart:IsA("BasePart") then
-        -- Use best-effort predicted pos (but only if predicted point is visible)
         local vel = Vector3.new(0,0,0)
         if targetPart.AssemblyLinearVelocity then
             vel = targetPart.AssemblyLinearVelocity
@@ -1033,12 +1019,17 @@ RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- compute desired camera CFrame: keep camera position, look at aimPos
+    -- compute desired camera CFrame
     local desiredCFrame = CFrame.new(camPos, aimPos)
 
-    -- smooth: slerp/lerp the look vector by interpolating CFrames
-    local t = math.clamp(1 - math.exp(-SMOOTHNESS * dt), 0, 1) -- exponential smoothing
-    camera.CFrame = camera.CFrame:Lerp(desiredCFrame, t)
+    if SNAP_TO_TARGET then
+        -- Instant snap
+        camera.CFrame = desiredCFrame
+    else
+        -- Smooth fallback
+        local t = math.clamp(1 - math.exp(-SMOOTHNESS * dt), 0, 1)
+        camera.CFrame = camera.CFrame:Lerp(desiredCFrame, t)
+    end
 end)
 
 -- Optional: Cleanup when player dies / camera resets (not strictly necessary, but helpful)
@@ -1049,7 +1040,9 @@ end)
 
 print("Dev Aimbot loaded. Toggle with", tostring(ENABLE_KEY))
 
+
    end,
 })
+
 
 
