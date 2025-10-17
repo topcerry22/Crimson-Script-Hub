@@ -990,7 +990,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         print("DevAimbot:", ENABLED and "Enabled" or "Disabled")
 Rayfield:Notify({
    Title = "Notice",
-   Content = "Aimbot is", ENABLED and "Enabled" or "Disabled",
+   Content = "DevAimbot:", ENABLED and "Enabled" or "Disabled",
    Duration = 6.5,
    Image = 4483362458,
 })
@@ -1049,6 +1049,7 @@ print("Dev Aimbot loaded. Toggle with", tostring(ENABLE_KEY))
 
    end,
 })
+
 
 
 
