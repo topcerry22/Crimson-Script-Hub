@@ -6,7 +6,7 @@ local Window = Rayfield:CreateWindow({
    LoadingSubtitle = "by RACECARGAMING559",
    ConfigurationSaving = {
       Enabled = false,
-      FolderName = nil, -- Create a custom folder for your hub/game
+      FolderName = CrimsonHub, -- Create a custom folder for your hub/game
       FileName = "Example Hub"
    },
    Discord = {
@@ -19,7 +19,7 @@ local Window = Rayfield:CreateWindow({
       Title = "Key System",
       Subtitle = "",
       Note = "Key In Discord Server",
-      FileName = "YoutubeHubKey1", -- It is recommended to use something unique as other scripts using Rayfield may overwrite your key file
+      FileName = "CrimsonHubKey", -- It is recommended to use something unique as other scripts using Rayfield may overwrite your key file
       SaveKey = True, -- The user's key will be saved, but if you change the key, they will be unable to use your script
       GrabKeyFromSite = true, -- If this is true, set Key below to the RAW site you would like Rayfield to get the key from
       Key = {"SIGMACITY"} -- List of keys that will be accepted by the system, can be RAW file links (pastebin, github etc) or simple strings ("hello","key22")
@@ -814,11 +814,12 @@ local ENABLE_KEY = Enum.KeyCode.H   -- toggle key
 local ENABLED = false                        -- starts disabled
 local FOV_DEGREES = 60                       -- cone to search in degrees
 local MAX_DISTANCE = 2000                    -- max target distance
-local SMOOTHNESS = 3                     -- higher = slower smoothing (lerp factor per second)
+local SMOOTHNESS = 8                         -- higher = slower smoothing (lerp factor per second)
 local TEAM_CHECK = true                      -- ignore players on same team
-local PREDICT = true                         -- enable linear prediction
+local PREDICT = false                         -- enable linear prediction
 local BULLET_SPEED = 200                     -- studs per second (approx) for prediction; set nil to disable prediction
 local AIM_AT_HITPART = true                  -- true aims at HumanoidRootPart if present, otherwise PrimaryPart
+local VISIBILITY_OFFSET = Vector3.new(0, 1.5, 0) -- offset used for LOS checks and aiming
 -- ==================
 
 local function isValidTarget(p)
@@ -848,6 +849,7 @@ local function getTargetPosition(target)
     return part.Position, part
 end
 
+-- Prediction helper (unchanged)
 local function predictPosition(currPos, currVel, originPos, speed)
     -- Simple linear prediction: solve for t where distance(origin, currPos + currVel * t) = speed * t
     -- Quadratic: (currVel·currVel - speed^2) t^2 + 2*(rel·currVel) t + (rel·rel) = 0, where rel = currPos - originPos
@@ -874,6 +876,37 @@ local function predictPosition(currPos, currVel, originPos, speed)
     return currPos + currVel * t
 end
 
+-- ===== Wall / LOS check =====
+local function hasLineOfSight(fromPos, toPos, targetModel)
+    -- If positions are invalid, be conservative (no LOS)
+    if not fromPos or not toPos then
+        return false
+    end
+
+    -- Short-circuit if targetModel is nil: do a simple raycast ignoring localPlayer
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = { localPlayer.Character }
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.IgnoreWater = true
+
+    local direction = toPos - fromPos
+    local result = Workspace:Raycast(fromPos, direction, params)
+
+    if not result then
+        -- nothing hit => clear view
+        return true
+    end
+
+    -- If ray hit something that is part of the target model, treat as visible
+    if targetModel and result.Instance and result.Instance:IsDescendantOf(targetModel) then
+        return true
+    end
+
+    -- otherwise blocked
+    return false
+end
+
+-- Finds closest valid target inside FOV + LOS
 local function getClosestTarget()
     local camPos = camera.CFrame.Position
     local camLook = camera.CFrame.LookVector
@@ -882,18 +915,52 @@ local function getClosestTarget()
     for _, p in pairs(Players:GetPlayers()) do
         if isValidTarget(p) then
             local pos, part = getTargetPosition(p)
-            if pos then
-                local dir = (pos - camPos)
+            if pos and part then
+                local targetPos = pos + VISIBILITY_OFFSET
+                local dir = (targetPos - camPos)
                 local dist = dir.Magnitude
                 if dist <= MAX_DISTANCE then
                     local dirNorm = dir.Unit
                     local angle = math.deg(math.acos(math.clamp(camLook:Dot(dirNorm), -1, 1)))
                     if angle <= FOV_DEGREES then
-                        -- prefer smaller angle, then closer
-                        if angle < bestAngle or (math.abs(angle - bestAngle) < 1e-3 and dist < bestDist) then
-                            bestTarget = {player = p, part = part}
-                            bestAngle = angle
-                            bestDist = dist
+                        -- prediction: if enabled, compute predicted point and require LOS to predicted if possible
+                        local passesLOS = true
+                        if PREDICT and BULLET_SPEED and part:IsA("BasePart") then
+                            local vel = Vector3.new(0,0,0)
+                            if part.AssemblyLinearVelocity then
+                                vel = part.AssemblyLinearVelocity
+                            elseif part.Velocity then
+                                vel = part.Velocity
+                            end
+                            local predicted = predictPosition(targetPos, vel, camPos, BULLET_SPEED)
+                            -- require LOS to predicted position; if predicted is off into wall, reject
+                            passesLOS = hasLineOfSight(camPos, predicted, p.Character)
+                            -- if predicted is visible, use the predicted position for distance/angle preference tests
+                            if passesLOS then
+                                -- recompute angle/dist using predicted
+                                local dir2 = (predicted - camPos)
+                                dist = dir2.Magnitude
+                                dirNorm = dir2.Unit
+                                angle = math.deg(math.acos(math.clamp(camLook:Dot(dirNorm), -1, 1)))
+                                -- still must be within FOV and distance
+                                if dist > MAX_DISTANCE or angle > FOV_DEGREES then
+                                    passesLOS = false
+                                else
+                                    targetPos = predicted
+                                end
+                            end
+                        else
+                            -- no prediction: require LOS to target position
+                            passesLOS = hasLineOfSight(camPos, targetPos, p.Character)
+                        end
+
+                        if passesLOS then
+                            -- prefer smaller angle, then closer
+                            if angle < bestAngle or (math.abs(angle - bestAngle) < 1e-3 and dist < bestDist) then
+                                bestTarget = {player = p, part = part, aimPos = targetPos}
+                                bestAngle = angle
+                                bestDist = dist
+                            end
                         end
                     end
                 end
@@ -927,27 +994,27 @@ RunService.RenderStepped:Connect(function(dt)
     if not targetPart then return end
 
     local camPos = camera.CFrame.Position
-    local aimPos = targetPart.Position
+    local aimPos = targetInfo.aimPos or targetPart.Position + VISIBILITY_OFFSET
 
-    -- prediction: try to get velocity of the part if possible
+    -- If prediction enabled but we didn't compute predicted in getClosestTarget (rare), fallback to attempt here:
     if PREDICT and BULLET_SPEED and targetPart and targetPart:IsA("BasePart") then
+        -- Use best-effort predicted pos (but only if predicted point is visible)
         local vel = Vector3.new(0,0,0)
-        local success, humanoid = pcall(function() return targetPlayer.Character and targetPlayer.Character:FindFirstChildOfClass("Humanoid") end)
-        -- best-effort: use assembly linear velocity if available
         if targetPart.AssemblyLinearVelocity then
             vel = targetPart.AssemblyLinearVelocity
         elseif targetPart.Velocity then
             vel = targetPart.Velocity
         end
-        local predicted = predictPosition(aimPos, vel, camPos, BULLET_SPEED)
-        aimPos = predicted
+        local predicted = predictPosition(targetPart.Position + VISIBILITY_OFFSET, vel, camPos, BULLET_SPEED)
+        if hasLineOfSight(camPos, predicted, targetPlayer.Character) then
+            aimPos = predicted
+        end
     end
 
     -- compute desired camera CFrame: keep camera position, look at aimPos
     local desiredCFrame = CFrame.new(camPos, aimPos)
 
     -- smooth: slerp/lerp the look vector by interpolating CFrames
-    -- We'll slerp by t factor based on SMOOTHNESS and dt
     local t = math.clamp(1 - math.exp(-SMOOTHNESS * dt), 0, 1) -- exponential smoothing
     camera.CFrame = camera.CFrame:Lerp(desiredCFrame, t)
 end)
