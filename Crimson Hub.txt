@@ -71,6 +71,12 @@ end
 local Button = MainTab1:CreateButton({
    Name = "Fly Script",
    Callback = function()
+Rayfield:Notify({
+   Title = "Notice",
+   Content = "Press F to activate, Space to Ascend, LeftControl to Descend",
+   Duration = 6.5,
+   Image = 4483362458,
+})
    	-- FlyScript (LocalScript)
 -- Place in StarterPlayer > StarterPlayerScripts
 -- Works for dev/testing in your own game
@@ -436,6 +442,7 @@ local Input = MainTab1:CreateInput({
         else
             warn("Invalid number entered for JumpPower!")
         end
+
     end,
 })
 local Players = game:GetService("Players")
@@ -543,6 +550,12 @@ local targetPosition = Vector3.new(827, 99, 2242) -- Change this to your desired
 local Button = MainTab2:CreateButton({
     Name = "Teleport to Office",
     Callback = function()
+Rayfield:Notify({
+   Title = "Notice",
+   Content = "Teleporting to office",
+   Duration = 6.5,
+   Image = 4483362458,
+})
         local char = player.Character or player.CharacterAdded:Wait()
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if hrp then
@@ -561,6 +574,12 @@ local targetPosition = Vector3.new(-930, 94, 2061) -- Change this to your desire
 local Button = MainTab2:CreateButton({
     Name = "Teleport to Hideout",
     Callback = function()
+Rayfield:Notify({
+   Title = "Notice",
+   Content = "Teleporting to Hideout",
+   Duration = 6.5,
+   Image = 4483362458,
+})
         local char = player.Character or player.CharacterAdded:Wait()
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if hrp then
@@ -640,55 +659,6 @@ local Input = MainTab2:CreateInput({
         end
     end,
 })
-local Button = MainTab1:CreateButton({
-   Name = "Godmode",
-   Callback = function()
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local localPlayer = Players.LocalPlayer
-local character = localPlayer.Character or localPlayer.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-
--- GLOBAL state to handle multiple runs
-_G.GodMode = _G.GodMode or {}
-local state = _G.GodMode
-
-if state.enabled then
-    -- Disable GodMode
-    if state.connection then
-        state.connection:Disconnect()
-        state.connection = nil
-    end
-
-    -- Remove ForceField if exists
-    local ff = character:FindFirstChild("AdminForceField")
-    if ff then
-        ff:Destroy()
-    end
-
-    state.enabled = false
-    print("[GodMode] Disabled")
-else
-    -- Enable GodMode
-    state.enabled = true
-
-    -- Add ForceField
-    local ff = Instance.new("ForceField")
-    ff.Name = "AdminForceField"
-    ff.Parent = character
-
-    -- Keep health full every heartbeat
-    state.connection = RunService.Heartbeat:Connect(function()
-        if humanoid and humanoid.Health > 0 then
-            humanoid.Health = humanoid.MaxHealth
-        end
-    end)
-
-    print("[GodMode] Enabled")
-end
-
-   end,
-})
 
 local MainSection = MainTab2:CreateSection("Main")
 
@@ -701,6 +671,12 @@ local MainSection = MainTab4:CreateSection("Main")
 local Button = MainTab4:CreateButton({
    Name = "Steal Manager Spot",
    Callback = function()
+Rayfield:Notify({
+   Title = "Notice",
+   Content = "Will automatically teleport to manager's desk",
+   Duration = 6.5,
+   Image = 4483362458,
+})
 -- TeleportWhenTeamEmpty.lua
 -- LocalScript (client)
 -- Teleports the local player to TELEPORT_POSITION when TARGET_TEAM_NAME has no players.
@@ -812,4 +788,177 @@ end)
 
    end,
 })
+local Button = MainTab1:CreateButton({
+   Name = "Aimbot",
+   Callback = function()
+ Rayfield:Notify({
+   Title = "Notice",
+   Content = "Use H to toggle aimbot",
+   Duration = 6.5,
+   Image = 4483362458,
+})
 
+-- Dev Aimbot LocalScript (StarterPlayerScripts)
+-- Use only in places you own. Do not abuse.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local localPlayer = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
+
+-- ===== CONFIG =====
+local ENABLE_KEY = Enum.KeyCode.H   -- toggle key
+local ENABLED = false                        -- starts disabled
+local FOV_DEGREES = 60                       -- cone to search in degrees
+local MAX_DISTANCE = 2000                    -- max target distance
+local SMOOTHNESS = 3                     -- higher = slower smoothing (lerp factor per second)
+local TEAM_CHECK = true                      -- ignore players on same team
+local PREDICT = true                         -- enable linear prediction
+local BULLET_SPEED = 200                     -- studs per second (approx) for prediction; set nil to disable prediction
+local AIM_AT_HITPART = true                  -- true aims at HumanoidRootPart if present, otherwise PrimaryPart
+-- ==================
+
+local function isValidTarget(p)
+    if not p or p == localPlayer then return false end
+    if not p.Character or not p.Character.Parent then return false end
+    local hrp = p.Character:FindFirstChild("HumanoidRootPart") or p.Character.PrimaryPart
+    if not hrp then return false end
+    -- team check
+    if TEAM_CHECK then
+        local myTeam = localPlayer.Team
+        if myTeam and p.Team == myTeam then
+            return false
+        end
+    end
+    return true
+end
+
+local function getTargetPosition(target)
+    if not target or not target.Character then return nil end
+    local part
+    if AIM_AT_HITPART then
+        part = target.Character:FindFirstChild("HumanoidRootPart") or target.Character.PrimaryPart
+    else
+        part = target.Character.PrimaryPart or target.Character:FindFirstChild("HumanoidRootPart")
+    end
+    if not part then return nil end
+    return part.Position, part
+end
+
+local function predictPosition(currPos, currVel, originPos, speed)
+    -- Simple linear prediction: solve for t where distance(origin, currPos + currVel * t) = speed * t
+    -- Quadratic: (currVel·currVel - speed^2) t^2 + 2*(rel·currVel) t + (rel·rel) = 0, where rel = currPos - originPos
+    local rel = currPos - originPos
+    local a = currVel:Dot(currVel) - (speed * speed)
+    local b = 2 * rel:Dot(currVel)
+    local c = rel:Dot(rel)
+    local discriminant = b*b - 4*a*c
+    if a == 0 then
+        if b == 0 then return currPos end
+        local t = -c / b
+        if t > 0 then return currPos + currVel * t else return currPos end
+    end
+    if discriminant < 0 then
+        return currPos -- no valid intercept, fallback
+    end
+    local sqrtD = math.sqrt(discriminant)
+    local t1 = (-b + sqrtD) / (2 * a)
+    local t2 = (-b - sqrtD) / (2 * a)
+    local t = math.min(t1 > 0 and t1 or math.huge, t2 > 0 and t2 or math.huge)
+    if t == math.huge or t <= 0 then
+        return currPos
+    end
+    return currPos + currVel * t
+end
+
+local function getClosestTarget()
+    local camPos = camera.CFrame.Position
+    local camLook = camera.CFrame.LookVector
+    local bestTarget, bestAngle, bestDist = nil, math.huge, math.huge
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if isValidTarget(p) then
+            local pos, part = getTargetPosition(p)
+            if pos then
+                local dir = (pos - camPos)
+                local dist = dir.Magnitude
+                if dist <= MAX_DISTANCE then
+                    local dirNorm = dir.Unit
+                    local angle = math.deg(math.acos(math.clamp(camLook:Dot(dirNorm), -1, 1)))
+                    if angle <= FOV_DEGREES then
+                        -- prefer smaller angle, then closer
+                        if angle < bestAngle or (math.abs(angle - bestAngle) < 1e-3 and dist < bestDist) then
+                            bestTarget = {player = p, part = part}
+                            bestAngle = angle
+                            bestDist = dist
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return bestTarget
+end
+
+-- Toggle handling
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == ENABLE_KEY then
+        ENABLED = not ENABLED
+        -- optional print
+        print("DevAimbot:", ENABLED and "Enabled" or "Disabled")
+    end
+end)
+
+-- Main aim loop on RenderStepped for smooth camera updates
+RunService.RenderStepped:Connect(function(dt)
+    if not ENABLED then return end
+    if not camera or not camera.Parent then return end
+
+    local targetInfo = getClosestTarget()
+    if not targetInfo then return end
+
+    local targetPlayer = targetInfo.player
+    local targetPart = targetInfo.part
+    if not targetPart then return end
+
+    local camPos = camera.CFrame.Position
+    local aimPos = targetPart.Position
+
+    -- prediction: try to get velocity of the part if possible
+    if PREDICT and BULLET_SPEED and targetPart and targetPart:IsA("BasePart") then
+        local vel = Vector3.new(0,0,0)
+        local success, humanoid = pcall(function() return targetPlayer.Character and targetPlayer.Character:FindFirstChildOfClass("Humanoid") end)
+        -- best-effort: use assembly linear velocity if available
+        if targetPart.AssemblyLinearVelocity then
+            vel = targetPart.AssemblyLinearVelocity
+        elseif targetPart.Velocity then
+            vel = targetPart.Velocity
+        end
+        local predicted = predictPosition(aimPos, vel, camPos, BULLET_SPEED)
+        aimPos = predicted
+    end
+
+    -- compute desired camera CFrame: keep camera position, look at aimPos
+    local desiredCFrame = CFrame.new(camPos, aimPos)
+
+    -- smooth: slerp/lerp the look vector by interpolating CFrames
+    -- We'll slerp by t factor based on SMOOTHNESS and dt
+    local t = math.clamp(1 - math.exp(-SMOOTHNESS * dt), 0, 1) -- exponential smoothing
+    camera.CFrame = camera.CFrame:Lerp(desiredCFrame, t)
+end)
+
+-- Optional: Cleanup when player dies / camera resets (not strictly necessary, but helpful)
+Players.LocalPlayer.CharacterAdded:Connect(function(char)
+    wait(0.1)
+    camera = Workspace.CurrentCamera
+end)
+
+print("Dev Aimbot loaded. Toggle with", tostring(ENABLE_KEY))
+
+   end,
+})
