@@ -1040,15 +1040,10 @@ end)
 
 print("Dev Aimbot loaded. Toggle with", tostring(ENABLE_KEY))
 
- Rayfield:Notify({
-   Title = "Notice",
-   Content = ""DevAimbot:", ENABLED and "Enabled" or "Disabled"",
-   Duration = 6.5,
-   Image = 4483362458,
-})
 
    end,
 })
+
 
 
 
