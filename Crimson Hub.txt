@@ -1043,4 +1043,66 @@ print("Dev Aimbot loaded. Toggle with", tostring(ENABLE_KEY))
 
    end,
 })
+local Toggle = MainTab1:CreateToggle({
+   Name = "Noclip",
+   CurrentValue = false,
+   Flag = "Toggle222", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
+   Callback = function(Value)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local noclipConnection
+local respawnConnection
+
+if Value then
+    -- Function to disable collisions
+    local function enableNoclip(char)
+        task.wait(0.1)
+        noclipConnection = RunService.Heartbeat:Connect(function()
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end)
+    end
+
+    -- Enable immediately
+    if player.Character then
+        enableNoclip(player.Character)
+    end
+
+    -- Keep active after respawn
+    respawnConnection = player.CharacterAdded:Connect(function(char)
+        enableNoclip(char)
+    end)
+
+    print("[Noclip Enabled and Persistent]")
+else
+    -- Disable noclip
+    if noclipConnection then
+        noclipConnection:Disconnect()
+        noclipConnection = nil
+    end
+    if respawnConnection then
+        respawnConnection:Disconnect()
+        respawnConnection = nil
+    end
+
+    -- Restore collisions
+    local char = player.Character
+    if char then
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+
+    print("[Noclip Disabled]")
+end
+
+   end,
+})
 
