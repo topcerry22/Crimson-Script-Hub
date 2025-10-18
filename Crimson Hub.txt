@@ -1053,73 +1053,50 @@ local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local noclipConnection
-local respawnConnection
 
-local function enableNoclip()
-	if noclipConnection then return end -- already enabled
+-- Function to handle noclip state
+local function handleNoclip(Value)
+    if Value then
+        -- Enable noclip
+        if noclipConnection then noclipConnection:Disconnect() end
 
-	local function setNoCollide(char)
-		for _, part in pairs(char:GetDescendants()) do
-			if part:IsA("BasePart") then
-				part.CanCollide = false
-			end
-		end
-	end
+        noclipConnection = RunService.Heartbeat:Connect(function()
+            local char = player.Character
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+        print("[Noclip Enabled]")
+    else
+        -- Disable noclip completely
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
 
-	local function loopNoclip(char)
-		noclipConnection = RunService.Heartbeat:Connect(function()
-			for _, part in pairs(char:GetDescendants()) do
-				if part:IsA("BasePart") then
-					part.CanCollide = false
-				end
-			end
-		end)
-	end
-
-	local function onCharacterAdded(char)
-		task.wait(0.1)
-		setNoCollide(char)
-		loopNoclip(char)
-	end
-
-	if player.Character then
-		onCharacterAdded(player.Character)
-	end
-
-	respawnConnection = player.CharacterAdded:Connect(onCharacterAdded)
-	print("[Noclip Enabled]")
+        local char = player.Character
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+        print("[Noclip Disabled]")
+    end
 end
 
-local function disableNoclip()
-	if noclipConnection then
-		noclipConnection:Disconnect()
-		noclipConnection = nil
-	end
-	if respawnConnection then
-		respawnConnection:Disconnect()
-		respawnConnection = nil
-	end
-
-	local char = player.Character
-	if char then
-		for _, part in pairs(char:GetDescendants()) do
-			if part:IsA("BasePart") then
-				part.CanCollide = true
-			end
-		end
-	end
-
-	print("[Noclip Disabled]")
-end
-
--- === Toggle handling ===
-if Value then
-	enableNoclip()
-else
-	disableNoclip()
-end
+-- 🔹 Example toggle:
+-- You can call this manually or from your toggle system:
+-- handleNoclip(true)  -- turn on
+-- handleNoclip(false) -- turn off
 
    end,
 })
+
 
 
