@@ -40,6 +40,118 @@ local MainSection = MainTab3:CreateSection("Main")
 
 
 local Button = MainTab1:CreateButton({
+    Name = "Toggle Invisible",
+    Callback = function()
+    local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- Configuration
+local TOGGLE_KEY = Enum.KeyCode.J
+local TELEPORT_DEPTH = 50 -- Depth underground
+
+-- State variables
+local isUnderground = false
+local invisibleFloor = nil
+local renderConnection = nil
+
+-- Camera memory variables
+local savedCamRotation = nil
+local savedCamY = nil
+local camOffsetXZ = nil
+
+-- Function to toggle collision so you don't get stuck in underground dirt/parts
+local function setCharacterCollision(character, canCollide)
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+			part.CanCollide = canCollide
+		end
+	end
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+
+	if input.KeyCode == TOGGLE_KEY then
+		local character = player.Character
+		if not character then return end
+		
+		local rootPart = character:FindFirstChild("HumanoidRootPart")
+		if not rootPart then return end
+
+		if not isUnderground then
+			-- --- GOING UNDERGROUND ---
+			isUnderground = true
+			
+			-- 1. Save camera details (Rotation, Height, and its distance from you)
+			savedCamRotation = camera.CFrame.Rotation
+			savedCamY = camera.CFrame.Position.Y
+			camOffsetXZ = Vector3.new(
+				camera.CFrame.Position.X - rootPart.Position.X,
+				0,
+				camera.CFrame.Position.Z - rootPart.Position.Z
+			)
+			
+			-- 2. Create a massive invisible floor where you are going
+			invisibleFloor = Instance.new("Part")
+			invisibleFloor.Name = "UndergroundPlatform"
+			invisibleFloor.Size = Vector3.new(5000, 5, 5000)
+			invisibleFloor.Position = rootPart.Position - Vector3.new(0, TELEPORT_DEPTH + 3, 0)
+			invisibleFloor.Anchored = true
+			invisibleFloor.Transparency = 1
+			invisibleFloor.CanCollide = true
+			invisibleFloor.Parent = workspace
+			
+			-- 3. Turn off character collisions
+			setCharacterCollision(character, false)
+			
+			-- 4. Teleport down
+			rootPart.CFrame = rootPart.CFrame - Vector3.new(0, TELEPORT_DEPTH, 0)
+			
+			-- 5. Camera follows X/Z position but keeps original rotation and Y height
+			camera.CameraType = Enum.CameraType.Scriptable
+			renderConnection = RunService.RenderStepped:Connect(function()
+				if character and rootPart then
+					local targetSurfacePosition = Vector3.new(rootPart.Position.X, 0, rootPart.Position.Z) 
+												+ camOffsetXZ 
+												+ Vector3.new(0, savedCamY, 0)
+					
+					camera.CFrame = CFrame.new(targetSurfacePosition) * savedCamRotation
+				end
+			end)
+			
+		else
+			-- --- RETURNING TO SURFACE ---
+			isUnderground = false
+			
+			-- 1. Stop the camera tracking and reset it
+			if renderConnection then
+				renderConnection:Disconnect()
+				renderConnection = nil
+			end
+			camera.CameraType = Enum.CameraType.Custom
+			
+			-- 2. Turn collisions back on
+			setCharacterCollision(character, true)
+			
+			-- 3. Teleport straight back up to the surface
+			rootPart.CFrame = rootPart.CFrame + Vector3.new(0, TELEPORT_DEPTH, 0)
+			
+			-- 4. Clean up the invisible floor
+			if invisibleFloor then
+				invisibleFloor:Destroy()
+				invisibleFloor = nil
+			end
+		end
+	end
+end)
+   end,
+})
+
+local Button = MainTab1:CreateButton({
    Name = "Infinite Jump Toggle",
    Callback = function()
        --Toggles the infinite jump between on or off on every script run
@@ -1041,5 +1153,285 @@ end)
 print("Dev Aimbot loaded. Toggle with", tostring(ENABLE_KEY))
 
 
+   end,
+})
+
+local Button = MainTab3:CreateButton({
+   Name = "Grab Gun",
+   Callback = function()
+       -- Define the name of the object you are looking for
+local objectName = "GunDrop"
+ 
+-- Get the local player
+local player = game.Players.LocalPlayer
+ 
+-- Function to move the player to GunDrop and back
+local function moveToGunDropAndBack()
+    -- Find the object in the workspace
+    local gunDrop = workspace:FindFirstChild(objectName)
+ 
+    -- Check if the object exists
+    if gunDrop then
+        -- Get the character of the player
+        local character = player.Character or player.CharacterAdded:Wait()
+ 
+        -- Check if the character exists
+        if character then
+            -- Get the HumanoidRootPart of the character
+            local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+ 
+            -- Save the original position
+            local originalPosition = humanoidRootPart.CFrame
+ 
+            -- Move the character to GunDrop's position
+            humanoidRootPart.CFrame = CFrame.new(gunDrop.Position)
+            print("Player moved to the position of GunDrop.")
+ 
+            -- Wait for 5 seconds (or any desired duration)
+            wait(1)
+ 
+            -- Move the character back to the original position
+            humanoidRootPart.CFrame = originalPosition
+            print("Player moved back to the original position.")
+        else
+            print("Character not found.")
+        end
+    else
+        print("Object named " .. objectName .. " not found in the workspace.")
+    end
+end
+ 
+-- Call the function to move the player to GunDrop and back
+moveToGunDropAndBack()
+   end,
+})
+
+local MainTab5 = Window:CreateTab("99 nights in the forest", nil) -- Title, Image
+local MainSection = MainTab5:CreateSection("Main")
+
+local Button = MainTab5:CreateButton({
+   Name = "Esp Fuel",
+   Callback = function()
+ -- Highlight specific items in workspace.Items with toggle support
+-- Names: Log, Coal, Fuel Canister
+-- Keybind: G (toggle highlights on/off)
+
+local UserInputService = game:GetService("UserInputService")
+local itemsFolder = workspace:FindFirstChild("Items")
+
+if not itemsFolder then
+	warn("No folder named 'Items' found in workspace!")
+	return
+end
+
+-- Items to highlight
+local allowedNames = {
+	Log = true,
+	Coal = true,
+	["Fuel Canister"] = true,
+	["Oil Barrel"] = true
+}
+
+-- Color per item
+local colors = {
+	Log = Color3.fromRGB(139, 69, 19),       -- brown
+	Coal = Color3.fromRGB(80, 80, 80),       -- dark gray
+	["Fuel Canister"] = Color3.fromRGB(255, 140, 0), -- orange
+	["Oil Barrel"] = Color3.fromRGB(220, 20, 60) -- dark red
+}
+
+local highlightEnabled = true
+
+-- Function to create highlight
+local function createHighlight(obj)
+	if allowedNames[obj.Name] and (obj:IsA("BasePart") or obj:IsA("Model")) then
+		if not obj:FindFirstChild("AutoHighlight") then
+			local highlight = Instance.new("Highlight")
+			highlight.Name = "AutoHighlight"
+			highlight.Adornee = obj
+			highlight.FillColor = colors[obj.Name] or Color3.fromRGB(255, 255, 0)
+			highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+			highlight.FillTransparency = 0.25
+			highlight.OutlineTransparency = 0
+			highlight.Enabled = highlightEnabled
+			highlight.Parent = obj
+		else
+			obj.AutoHighlight.Enabled = highlightEnabled
+		end
+	end
+end
+
+-- Function to remove highlight
+local function removeHighlight(obj)
+	local highlight = obj:FindFirstChild("AutoHighlight")
+	if highlight then
+		highlight:Destroy()
+	end
+end
+
+-- Highlight all matching items
+for _, child in ipairs(itemsFolder:GetChildren()) do
+	createHighlight(child)
+end
+
+-- Watch for new items
+itemsFolder.ChildAdded:Connect(function(child)
+	createHighlight(child)
+end)
+
+-- Remove highlight when deleted
+itemsFolder.ChildRemoved:Connect(function(child)
+	removeHighlight(child)
+end)
+
+-- Toggle all highlights with keypress (H)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.G then
+		highlightEnabled = not highlightEnabled
+		for _, item in ipairs(itemsFolder:GetChildren()) do
+			local highlight = item:FindFirstChild("AutoHighlight")
+			if highlight then
+				highlight.Enabled = highlightEnabled
+			end
+		end
+		print("[Highlight Script] Highlights " .. (highlightEnabled and "ENABLED" or "DISABLED"))
+	end
+end)
+
+print("[Highlight Script] Active — highlighting Log, Coal, and Fuel Canister (press G to toggle)")
+
+Rayfield:Notify({
+   Title = "Notice",
+   Content = "Use G to toggle",
+   Duration = 6.5,
+   Image = 4483362458,
+})
+   end,
+})
+local Button = MainTab5:CreateButton({
+   Name = "Esp Chest",
+   Callback = function()
+ -- Highlight specific items in workspace.Items with toggle support
+-- Names: Log, Coal, Fuel Canister
+-- Keybind: G (toggle highlights on/off)
+
+local UserInputService = game:GetService("UserInputService")
+local itemsFolder = workspace:FindFirstChild("Items")
+
+if not itemsFolder then
+	warn("No folder named 'Items' found in workspace!")
+	return
+end
+
+-- Items to highlight
+local allowedNames = {
+	["Item Chest"] = true,
+	["Item Chest2"] = true,
+	["Item Chest3"] = true,
+	["Item Chest4"] = true
+}
+
+-- Color per item
+local colors = {
+	["Item Chest"] = Color3.fromRGB(240, 220, 130),       -- pale gold
+	["Item Chest2"] = Color3.fromRGB(230, 190, 80),       -- dark gray
+	["Item Chest3"] = Color3.fromRGB(255, 215, 0), -- gold
+	["Item Chest4"] = Color3.fromRGB(218, 165, 32) -- gold
+}
+
+local highlightEnabled = true
+
+-- Function to create highlight
+local function createHighlight(obj)
+	if allowedNames[obj.Name] and (obj:IsA("BasePart") or obj:IsA("Model")) then
+		if not obj:FindFirstChild("AutoHighlight") then
+			local highlight = Instance.new("Highlight")
+			highlight.Name = "AutoHighlight"
+			highlight.Adornee = obj
+			highlight.FillColor = colors[obj.Name] or Color3.fromRGB(255, 255, 0)
+			highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+			highlight.FillTransparency = 0.25
+			highlight.OutlineTransparency = 0
+			highlight.Enabled = highlightEnabled
+			highlight.Parent = obj
+		else
+			obj.AutoHighlight.Enabled = highlightEnabled
+		end
+	end
+end
+
+-- Function to remove highlight
+local function removeHighlight(obj)
+	local highlight = obj:FindFirstChild("AutoHighlight")
+	if highlight then
+		highlight:Destroy()
+	end
+end
+
+-- Highlight all matching items
+for _, child in ipairs(itemsFolder:GetChildren()) do
+	createHighlight(child)
+end
+
+-- Watch for new items
+itemsFolder.ChildAdded:Connect(function(child)
+	createHighlight(child)
+end)
+
+-- Remove highlight when deleted
+itemsFolder.ChildRemoved:Connect(function(child)
+	removeHighlight(child)
+end)
+
+-- Toggle all highlights with keypress (H)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.H then
+		highlightEnabled = not highlightEnabled
+		for _, item in ipairs(itemsFolder:GetChildren()) do
+			local highlight = item:FindFirstChild("AutoHighlight")
+			if highlight then
+				highlight.Enabled = highlightEnabled
+			end
+		end
+		print("[Highlight Script] Highlights " .. (highlightEnabled and "ENABLED" or "DISABLED"))
+	end
+end)
+
+print("[Highlight Script] Active — highlighting Log, Coal, and Fuel Canister (press G to toggle)")
+
+Rayfield:Notify({
+   Title = "Notice",
+   Content = "Use H to toggle",
+   Duration = 6.5,
+   Image = 4483362458,
+})
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+
+-- Configuration
+local TELEPORT_DEPTH = 50 -- Depth underground
+
+-- State variables (Must be OUTSIDE the callback so they don't reset every click)
+local isUnderground = false
+local invisibleFloor = nil
+local renderConnection = nil
+
+-- Camera memory variables
+local savedCamRotation = nil
+local savedCamY = nil
+local camOffsetXZ = nil
+
+-- Function to toggle collision so you don't get stuck
+local function setCharacterCollision(character, canCollide)
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            part.CanCollide = canCollide
+        end
+    end
+end
    end,
 })
