@@ -148,6 +148,13 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		end
 	end
 end)
+
+Rayfield:Notify({
+   Title = "Notice",
+   Content = "Use J to toggle",
+   Duration = 6.5,
+   Image = 4483362458,
+})
    end,
 })
 
@@ -183,12 +190,7 @@ end
 local Button = MainTab1:CreateButton({
    Name = "Fly Script",
    Callback = function()
-Rayfield:Notify({
-   Title = "Notice",
-   Content = "Press F to activate, Space to Ascend, LeftControl to Descend",
-   Duration = 6.5,
-   Image = 4483362458,
-})
+
    	-- FlyScript (LocalScript)
 -- Place in StarterPlayer > StarterPlayerScripts
 -- Works for dev/testing in your own game
@@ -201,7 +203,7 @@ local player = Players.LocalPlayer
 local cam = workspace.CurrentCamera
 
 -- Config
-local TOGGLE_KEY = Enum.KeyCode.F
+local TOGGLE_KEY = Enum.KeyCode.Y
 local ASCEND_KEY = Enum.KeyCode.Space
 local DESCEND_KEY = Enum.KeyCode.LeftControl
 local MOVE_SPEED = 80         -- studs/second (base)
@@ -381,6 +383,12 @@ script.Destroying:Connect(function()
 	cleanupFlightObjects()
 end)
 
+Rayfield:Notify({
+   Title = "Notice",
+   Content = "Press Y to activate, Space to Ascend, LeftControl to Descend",
+   Duration = 6.5,
+   Image = 4483362458,
+})
    end,
 })
 local Button = MainTab1:CreateButton({
