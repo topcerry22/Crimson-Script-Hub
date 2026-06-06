@@ -1,0 +1,320 @@
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "CrimsonExplorer"
+Gui.ResetOnSpawn = false
+Gui.Parent = PlayerGui
+
+--------------------------------------------------
+-- MAIN WINDOW
+--------------------------------------------------
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.fromOffset(520, 620)
+Main.Position = UDim2.fromOffset(50, 50)
+Main.BackgroundColor3 = Color3.fromRGB(20,20,20)
+Main.BorderSizePixel = 0
+Main.Parent = Gui
+
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0,10)
+
+-- shadow
+local Shadow = Instance.new("ImageLabel")
+Shadow.BackgroundTransparency = 1
+Shadow.Image = "rbxassetid://6014261993"
+Shadow.ImageTransparency = 0.35
+Shadow.ScaleType = Enum.ScaleType.Slice
+Shadow.SliceCenter = Rect.new(49,49,450,450)
+Shadow.Size = UDim2.new(1,30,1,30)
+Shadow.Position = UDim2.new(0,-15,0,-15)
+Shadow.ZIndex = 0
+Shadow.Parent = Main
+
+--------------------------------------------------
+-- TOPBAR
+--------------------------------------------------
+
+local Topbar = Instance.new("Frame")
+Topbar.Size = UDim2.new(1,0,0,34)
+Topbar.BorderSizePixel = 0
+Topbar.Parent = Main
+
+Instance.new("UICorner", Topbar).CornerRadius = UDim.new(0,10)
+
+local Grad = Instance.new("UIGradient")
+Grad.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(180,30,30)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(90,10,10))
+}
+Grad.Parent = Topbar
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1,0,1,0)
+Title.BackgroundTransparency = 1
+Title.Text = "🔺 Crimson Explorer"
+Title.TextColor3 = Color3.new(1,1,1)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 18
+Title.Parent = Topbar
+
+--------------------------------------------------
+-- SEARCH
+--------------------------------------------------
+
+local Search = Instance.new("TextBox")
+Search.Size = UDim2.new(1,-16,0,26)
+Search.Position = UDim2.new(0,8,0,40)
+Search.PlaceholderText = "Search Instances..."
+Search.Text = ""
+Search.BackgroundColor3 = Color3.fromRGB(35,35,35)
+Search.TextColor3 = Color3.new(1,1,1)
+Search.Font = Enum.Font.Gotham
+Search.TextSize = 14
+Search.Parent = Main
+
+Instance.new("UICorner", Search).CornerRadius = UDim.new(0,6)
+
+--------------------------------------------------
+-- EXPLORER PANEL
+--------------------------------------------------
+
+local ExplorerFrame = Instance.new("ScrollingFrame")
+ExplorerFrame.Size = UDim2.new(0.65,0,1,-80)
+ExplorerFrame.Position = UDim2.new(0,0,0,75)
+ExplorerFrame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+ExplorerFrame.BorderSizePixel = 0
+ExplorerFrame.CanvasSize = UDim2.new()
+ExplorerFrame.ScrollBarThickness = 6
+ExplorerFrame.Parent = Main
+
+Instance.new("UICorner", ExplorerFrame).CornerRadius = UDim.new(0,8)
+
+local Layout = Instance.new("UIListLayout")
+Layout.Parent = ExplorerFrame
+
+--------------------------------------------------
+-- INFO PANEL
+--------------------------------------------------
+
+local Info = Instance.new("Frame")
+Info.Size = UDim2.new(0.35,0,1,-80)
+Info.Position = UDim2.new(0.65,0,0,75)
+Info.BackgroundColor3 = Color3.fromRGB(18,18,18)
+Info.BorderSizePixel = 0
+Info.Parent = Main
+
+Instance.new("UICorner", Info).CornerRadius = UDim.new(0,8)
+
+local InfoText = Instance.new("TextLabel")
+InfoText.Size = UDim2.new(1,-10,1,-10)
+InfoText.Position = UDim2.new(0,5,0,5)
+InfoText.BackgroundTransparency = 1
+InfoText.TextColor3 = Color3.fromRGB(220,220,220)
+InfoText.TextXAlignment = Enum.TextXAlignment.Left
+InfoText.TextYAlignment = Enum.TextYAlignment.Top
+InfoText.Font = Enum.Font.Gotham
+InfoText.TextSize = 13
+InfoText.TextWrapped = true
+InfoText.Text = "Select an object"
+InfoText.Parent = Info
+
+--------------------------------------------------
+-- STATE
+--------------------------------------------------
+
+local Expanded = {}
+local SelectedButton = nil
+
+--------------------------------------------------
+-- UTILS
+--------------------------------------------------
+
+local function GetPath(obj)
+	local path = obj.Name
+	local current = obj.Parent
+
+	while current and current ~= game do
+		path = current.Name .. "." .. path
+		current = current.Parent
+	end
+
+	return "game." .. path
+end
+
+local function UpdateInfo(obj)
+	InfoText.Text =
+		"Name: "..obj.Name..
+		"\nClass: "..obj.ClassName..
+		"\nChildren: "..#obj:GetChildren()..
+		"\n\nPath:\n"..GetPath(obj)
+end
+
+--------------------------------------------------
+-- CLEAR
+--------------------------------------------------
+
+local function Clear()
+	for _,v in ipairs(ExplorerFrame:GetChildren()) do
+		if v:IsA("Frame") then
+			v:Destroy()
+		end
+	end
+end
+
+--------------------------------------------------
+-- ROW CREATION (POLISHED)
+--------------------------------------------------
+
+local function CreateRow(obj, depth)
+
+	local Row = Instance.new("Frame")
+	Row.Size = UDim2.new(1,0,0,24)
+	Row.BackgroundTransparency = 1
+	Row.Parent = ExplorerFrame
+
+	local Expand = Instance.new("TextButton")
+	Expand.Size = UDim2.fromOffset(18,18)
+	Expand.Position = UDim2.fromOffset(depth*16,3)
+	Expand.BackgroundTransparency = 1
+	Expand.TextColor3 = Color3.fromRGB(255,255,255)
+	Expand.Font = Enum.Font.GothamBold
+	Expand.TextSize = 14
+	Expand.Parent = Row
+
+	local hasChildren = #obj:GetChildren() > 0
+	Expand.Text = hasChildren and (Expanded[obj] and "▼" or "▶") or ""
+
+	local Button = Instance.new("TextButton")
+	Button.Size = UDim2.new(1,-(depth*16+20),1,0)
+	Button.Position = UDim2.fromOffset(depth*16+18,0)
+	Button.BackgroundTransparency = 1
+	Button.TextXAlignment = Enum.TextXAlignment.Left
+	Button.TextColor3 = Color3.fromRGB(230,230,230)
+	Button.Font = Enum.Font.Gotham
+	Button.TextSize = 14
+	Button.Text = obj.Name.." ["..obj.ClassName.."]"
+	Button.Parent = Row
+
+	-- hover effect
+	Button.MouseEnter:Connect(function()
+		Button.TextColor3 = Color3.fromRGB(255,80,80)
+	end)
+
+	Button.MouseLeave:Connect(function()
+		if SelectedButton ~= Button then
+			Button.TextColor3 = Color3.fromRGB(230,230,230)
+		end
+	end)
+
+	Button.MouseButton1Click:Connect(function()
+		UpdateInfo(obj)
+
+		if SelectedButton then
+			SelectedButton.TextColor3 = Color3.fromRGB(230,230,230)
+		end
+
+		SelectedButton = Button
+		Button.TextColor3 = Color3.fromRGB(255,80,80)
+	end)
+
+	Expand.MouseButton1Click:Connect(function()
+		Expanded[obj] = not Expanded[obj]
+		task.defer(function()
+			Refresh()
+		end)
+	end)
+end
+
+--------------------------------------------------
+-- BUILD TREE
+--------------------------------------------------
+
+function AddObject(obj, depth)
+
+	local searchText = Search.Text:lower()
+
+	if searchText ~= "" then
+		if not obj.Name:lower():find(searchText) then
+			return
+		end
+	end
+
+	CreateRow(obj, depth)
+
+	if Expanded[obj] then
+		for _,child in ipairs(obj:GetChildren()) do
+			AddObject(child, depth + 1)
+		end
+	end
+end
+
+function Refresh()
+
+	Clear()
+
+	for _,service in ipairs(game:GetChildren()) do
+		AddObject(service, 0)
+	end
+
+	task.wait()
+
+	ExplorerFrame.CanvasSize =
+		UDim2.fromOffset(0, Layout.AbsoluteContentSize.Y + 10)
+end
+
+--------------------------------------------------
+-- EVENTS
+--------------------------------------------------
+
+Search:GetPropertyChangedSignal("Text"):Connect(Refresh)
+
+game.ChildAdded:Connect(function()
+	task.defer(Refresh)
+end)
+
+game.ChildRemoved:Connect(function()
+	task.defer(Refresh)
+end)
+
+Expanded[game] = true
+
+Refresh()
+
+--------------------------------------------------
+-- DRAG
+--------------------------------------------------
+
+local Dragging = false
+local DragStart
+local StartPos
+
+Topbar.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		Dragging = true
+		DragStart = input.Position
+		StartPos = Main.Position
+	end
+end)
+
+UIS.InputChanged:Connect(function(input)
+	if Dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local delta = input.Position - DragStart
+
+		Main.Position = UDim2.new(
+			StartPos.X.Scale,
+			StartPos.X.Offset + delta.X,
+			StartPos.Y.Scale,
+			StartPos.Y.Offset + delta.Y
+		)
+	end
+end)
+
+UIS.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		Dragging = false
+	end
+end)
